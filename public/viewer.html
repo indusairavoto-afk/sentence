@@ -197,6 +197,26 @@
             // Replace 'chat.json' with your actual json endpoint or file path
             const jsonPath = 'chat.json';
 
+            function processData(data) {
+                if (!Array.isArray(data)) {
+                    // Some systems output { messages: [...] }
+                    if (data.messages && Array.isArray(data.messages)) {
+                        data = data.messages;
+                    } else {
+                        throw new Error('Invalid JSON format: Expected an array of messages.');
+                    }
+                }
+
+                if (data.length === 0) {
+                    chatContainer.innerHTML = '<div class="status">No messages found in chat.json</div>';
+                    return;
+                }
+
+                data.forEach(msg => {
+                    renderMessage(msg, chatContainer);
+                });
+            }
+
             fetch(jsonPath)
                 .then(response => {
                     if (!response.ok) {
@@ -205,34 +225,43 @@
                     return response.json();
                 })
                 .then(data => {
-                    statusElement.remove();
-                    
-                    if (!Array.isArray(data)) {
-                        // Some systems output { messages: [...] }
-                        if (data.messages && Array.isArray(data.messages)) {
-                            data = data.messages;
-                        } else {
-                            throw new Error('Invalid JSON format: Expected an array of messages.');
-                        }
-                    }
-
-                    if (data.length === 0) {
-                        chatContainer.innerHTML = '<div class="status">No messages found in chat.json</div>';
-                        return;
-                    }
-
-                    data.forEach(msg => {
-                        renderMessage(msg, chatContainer);
-                    });
+                    if (statusElement) statusElement.remove();
+                    processData(data);
                 })
                 .catch(error => {
-                    statusElement.remove();
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'error';
-                    errorDiv.innerHTML = `<strong>Error:</strong> ${error.message} <br><br> 
-                                          <em>Make sure a valid <strong>chat.json</strong> file exists in the same directory as this HTML file. You may need to run a local development server to avoid CORS issues when fetching a local file.</em>`;
-                    chatContainer.appendChild(errorDiv);
-                    console.error('Error fetching chat JSON:', error);
+                    if (statusElement) statusElement.remove();
+                    const fallbackDiv = document.createElement('div');
+                    fallbackDiv.className = 'status';
+                    fallbackDiv.style.opacity = '1';
+                    fallbackDiv.innerHTML = `
+                        <div style="margin-bottom: 1rem;">
+                            <strong>Local Offline Mode </strong><br>
+                            <span style="opacity: 0.7;">Auto-loading <code>chat.json</code> failed or is blocked by your browser's local security policy (CORS).</span>
+                        </div>
+                        <div style="padding: 1.5rem; border: 1px dashed var(--text-color); border-radius: 0.5rem; display: inline-block; opacity: 0.8;">
+                            Select your <strong>chat.json</strong> file manually:<br><br>
+                            <input type="file" id="local-file-input" accept=".json" style="font-size: 1rem; cursor: pointer;">
+                        </div>
+                    `;
+                    chatContainer.appendChild(fallbackDiv);
+                    console.warn('Could not auto-fetch JSON, falling back to manual upload:', error);
+
+                    document.getElementById('local-file-input').addEventListener('change', (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                            try {
+                                const parsedData = JSON.parse(evt.target.result);
+                                fallbackDiv.remove();
+                                processData(parsedData);
+                            } catch (err) {
+                                alert("Failed to parse JSON file: " + err.message);
+                            }
+                        };
+                        reader.readAsText(file);
+                    });
                 });
         });
 
