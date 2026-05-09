@@ -19,6 +19,23 @@
         }
       },
       "required": ["visitors", "uses", "donationCount"]
+    },
+    "VaultItem": {
+      "title": "Vault Item",
+      "description": "Saved workflow item containing chat data",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "date": {
+          "type": "number"
+        },
+        "data": {
+          "type": "object"
+        }
+      },
+      "required": ["id", "date", "data"]
     }
   },
   "firestore": {
@@ -27,6 +44,12 @@
         "$ref": "#/entities/GlobalStats"
       },
       "description": "Global statistics collection. Usually only a single document 'global'."
+    },
+    "/users/{userId}/vault/{vaultId}": {
+      "schema": {
+        "$ref": "#/entities/VaultItem"
+      },
+      "description": "User's individual saved chats."
     }
   }
 }

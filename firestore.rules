@@ -7,6 +7,11 @@ service cloud.firestore {
 
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
     
     function isValidStats(data) {
        return data.keys().hasAll(['visitors', 'uses', 'donationCount']) &&
@@ -15,10 +20,24 @@ service cloud.firestore {
               data.donationCount is number;
     }
 
+    function isValidVaultItem(data) {
+      return data.keys().hasAll(['id', 'date', 'data']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.date is number &&
+             data.data is map;
+    }
+
     match /stats/{statId} {
       allow read: if true; 
-      allow create: if isValidStats(incoming()); 
-      allow update: if isValidStats(incoming());
+      allow create: if isValidId(statId) && isValidStats(incoming()); 
+      allow update: if isValidId(statId) && isValidStats(incoming());
+    }
+
+    match /users/{userId}/vault/{vaultId} {
+      allow read, list: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidId(vaultId) && isValidVaultItem(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId && isValidId(vaultId) && isValidVaultItem(incoming());
+      allow delete: if isSignedIn() && request.auth.uid == userId;
     }
   }
 }

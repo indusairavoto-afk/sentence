@@ -245,7 +245,7 @@ export function DonationSection() {
                 value={customAmount}
                 onChange={(e) => { setCustomAmount(e.target.value); setSelectedBaseAmount(null); }}
                 placeholder="Enter custom amount"
-                className="w-full py-4 pr-32 bg-transparent text-sm sm:text-base font-medium placeholder:font-normal placeholder:text-zinc-400 focus:outline-none"
+                className="w-full py-4 pr-32 bg-transparent text-sm sm:text-base font-medium placeholder:font-normal placeholder:text-zinc-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 onClick={() => setIsCurrencyDropdownOpen(false)}
               />
               <div 

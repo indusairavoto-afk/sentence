@@ -1,52 +1,84 @@
 import { ChatData } from '../App';
+import { db, auth } from '../firebase';
+import { collection, doc, setDoc, deleteDoc, getDocs, query, orderBy } from 'firebase/firestore';
 
-const VAULT_DB = 'VaultDB';
-const VAULT_STORE = 'conversations';
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 export const vaultDbTools = {
-  async init() {
-    return new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(VAULT_DB, 1);
-      request.onupgradeneeded = () => {
-        if (!request.result.objectStoreNames.contains(VAULT_STORE)) {
-          request.result.createObjectStore(VAULT_STORE, { keyPath: 'id' });
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  },
-  
   async getItems() {
-    const db = await this.init();
-    return new Promise<{id: string, date: number, data: ChatData}[]>((resolve, reject) => {
-      const transaction = db.transaction(VAULT_STORE, 'readonly');
-      const store = transaction.objectStore(VAULT_STORE);
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    if (!auth.currentUser) return [];
+    
+    const pathForList = `users/${auth.currentUser.uid}/vault`;
+    try {
+      const q = query(collection(db, pathForList), orderBy('date', 'desc'));
+      const snapshot = await getDocs(q);
+      const items: {id: string, date: number, data: ChatData}[] = [];
+      snapshot.forEach(doc => {
+        items.push(doc.data() as {id: string, date: number, data: ChatData});
+      });
+      return items;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.LIST, pathForList);
+      return [];
+    }
   },
   
   async saveItem(item: {id: string, date: number, data: ChatData}) {
-    const db = await this.init();
-    return new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(VAULT_STORE, 'readwrite');
-      const store = transaction.objectStore(VAULT_STORE);
-      const request = store.put(item);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    if (!auth.currentUser) throw new Error("Must be logged in");
+    
+    const pathForWrite = `users/${auth.currentUser.uid}/vault/${item.id}`;
+    try {
+      await setDoc(doc(db, `users/${auth.currentUser.uid}/vault`, item.id), item);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, pathForWrite);
+    }
   },
   
   async deleteItem(id: string) {
-    const db = await this.init();
-    return new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(VAULT_STORE, 'readwrite');
-      const store = transaction.objectStore(VAULT_STORE);
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    if (!auth.currentUser) throw new Error("Must be logged in");
+    
+    const pathForDelete = `users/${auth.currentUser.uid}/vault/${id}`;
+    try {
+      await deleteDoc(doc(db, `users/${auth.currentUser.uid}/vault`, id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, pathForDelete);
+    }
   }
 };
