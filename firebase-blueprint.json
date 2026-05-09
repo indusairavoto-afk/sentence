@@ -1,0 +1,32 @@
+{
+  "entities": {
+    "GlobalStats": {
+      "title": "Global Stats",
+      "description": "Tracks global statistics for the platform",
+      "type": "object",
+      "properties": {
+        "visitors": {
+          "type": "number",
+          "description": "Total number of unique visitors"
+        },
+        "uses": {
+          "type": "number",
+          "description": "Total number of bridged conversions or uses"
+        },
+        "donationCount": {
+          "type": "number",
+          "description": "Total number of people who clicked donate"
+        }
+      },
+      "required": ["visitors", "uses", "donationCount"]
+    }
+  },
+  "firestore": {
+    "/stats/{statId}": {
+      "schema": {
+        "$ref": "#/entities/GlobalStats"
+      },
+      "description": "Global statistics collection. Usually only a single document 'global'."
+    }
+  }
+}

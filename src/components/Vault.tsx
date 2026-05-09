@@ -3,12 +3,23 @@ import { motion } from 'motion/react';
 import { Lock, Unlock, FileText, Database, Shield, Key, Trash2, Eye } from 'lucide-react';
 import { vaultDbTools } from '../lib/vaultDb';
 import { ChatData } from '../App';
+import { auth } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 export function Vault() {
   const [unlocked, setUnlocked] = useState(false);
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
   const [items, setItems] = useState<{id: string, date: number, data: ChatData}[]>([]);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUnlocked(true);
+      } else {
+        setUnlocked(false);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const loadItems = async () => {
     try {
@@ -35,17 +46,6 @@ export function Vault() {
     }
   };
 
-  const handleUnlock = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === 'admin' || password.length >= 4) {
-      setUnlocked(true);
-      setError(false);
-    } else {
-      setError(true);
-      setPassword('');
-    }
-  };
-
   return (
     <div className="w-full max-w-4xl mx-auto flex flex-col items-center py-12 relative z-10">
       <div className="text-center mb-12 relative">
@@ -67,30 +67,16 @@ export function Vault() {
             </div>
           </div>
           
-          <form onSubmit={handleUnlock} className="flex flex-col gap-5">
-            <div>
-              <label className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold mb-3 block text-center">Master Password</label>
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 blur-xl group-focus-within:opacity-100 opacity-0 transition-opacity duration-500"></div>
-                <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 z-20" />
-                <input 
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={`w-full bg-white dark:bg-black border ${error ? 'border-red-500 text-red-500 focus:ring-red-500/20' : 'border-zinc-200/50 dark:border-white/10 text-zinc-900 dark:text-white'} text-sm pl-12 pr-4 py-4 placeholder-zinc-400 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-500 rounded-xl transition-all shadow-sm relative z-10 focus:ring-4 focus:ring-black/5 dark:focus:ring-white/5`}
-                  placeholder="Enter any password to unlock..."
-                />
-              </div>
+          <div className="flex flex-col gap-5 text-center">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              You are currently locked out.
+            </p>
+            <div className="bg-zinc-50 dark:bg-black/40 border border-zinc-200 dark:border-white/5 rounded-xl p-4 mt-2">
+               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                 To access or create a vault, please extract a chat in the <strong>Converter</strong> tab and click <strong>Save to Vault</strong>. You will be prompted to securely sign in with Google then.
+               </p>
             </div>
-            {error && <p className="text-[10px] text-red-500 font-mono text-center uppercase tracking-widest bg-red-50 dark:bg-red-950/20 py-2 rounded">Password too short. Try again.</p>}
-            <button 
-              type="submit"
-              className="w-full bg-zinc-900 dark:bg-white text-white dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-100 px-6 py-4 rounded-xl font-bold text-[10px] uppercase tracking-[0.2em] shadow-xl hover:shadow-[0_0_30px_rgba(0,0,0,0.2)] dark:hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 mt-2 group outline-none overflow-hidden relative"
-            >
-              <div className="absolute inset-0 bg-white/20 dark:bg-black/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
-              <span className="relative z-10">Unlock Vault</span>
-            </button>
-          </form>
+          </div>
         </motion.div>
       ) : (
         <motion.div 
@@ -103,14 +89,8 @@ export function Vault() {
               <div className="p-2 bg-green-500/10 dark:bg-green-500/20 rounded-lg">
                 <Unlock size={16} className="text-green-600 dark:text-green-400" />
               </div>
-              <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-zinc-900 dark:text-white">Vault Access Granted</span>
+              <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-zinc-900 dark:text-white">Vault Access Granted (Signed In)</span>
             </div>
-            <button 
-              onClick={() => setUnlocked(false)}
-              className="text-[10px] uppercase tracking-[0.15em] px-4 py-2 border border-zinc-200 dark:border-white/10 hover:bg-white dark:hover:bg-black rounded-lg transition-colors text-zinc-600 dark:text-zinc-400 font-bold shadow-sm"
-            >
-              Lock Vault
-            </button>
           </div>
 
           {items.length > 0 ? (

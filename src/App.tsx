@@ -1,13 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowRight, Download, Copy, Link as LinkIcon, Trash2, FileJson, FileText, CheckCircle2, Loader2, Sun, Moon, Search, Database, ExternalLink } from 'lucide-react';
+import { Lock, Image as ImageIcon, ArrowRight, Download, Copy, Link as LinkIcon, Trash2, FileJson, FileText, CheckCircle2, Loader2, Sun, Moon, Search, Database, ExternalLink, Heart, AlertCircle, Users, Activity, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ExploreTools } from './components/ExploreTools';
 import { DonationSection } from './components/DonationSection';
 import { DonationModal } from './components/DonationModal';
 import { Vault } from './components/Vault';
+import { About } from './components/About';
+import { Impact } from './components/Impact';
+import { FAQ } from './components/FAQ';
+import { Privacy } from './components/Privacy';
+import { Terms } from './components/Terms';
+import { Contact } from './components/Contact';
+import { Security } from './components/Security';
+import { ApiDocs } from './components/ApiDocs';
+import { AILogoMarquee } from './components/AILogoMarquee';
 import { vaultDbTools } from './lib/vaultDb';
+import { db, incrementGlobalStat, auth, signInWithGoogle, logOut } from './firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 const DB_NAME = 'BridgeDB';
 const STORE_NAME = 'drafts';
@@ -110,7 +121,76 @@ function useTypewriterPlaceholder(phrases: string[], typingSpeed = 50, deletingS
   return text;
 }
 
+const ChatImage = ({ url, isAbsolute }: { url: string, isAbsolute: boolean }) => {
+  const [error, setError] = useState(false);
+  const finalUrl = isAbsolute ? url : `/${url}`;
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center w-[180px] h-[320px] rounded-xl border border-zinc-200/50 dark:border-white/10 shadow-sm bg-zinc-100/50 dark:bg-zinc-800/50 backdrop-blur-sm group/img relative overflow-hidden">
+        <Lock className="w-8 h-8 text-zinc-400 dark:text-zinc-500 mb-2" />
+        <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">Secured Image</span>
+        <span className="text-[10px] px-4 text-center mt-2 text-zinc-400/50">Cannot be displayed directly due to authorization.</span>
+        {isAbsolute && url.startsWith('http') && (
+          <a href={url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center gap-1 absolute bottom-3">
+            <ExternalLink size={10} /> Open Original
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1 group/img relative">
+      <img 
+        src={finalUrl} 
+        alt="Attached image" 
+        onError={() => setError(true)}
+        className="max-w-full rounded-xl border border-zinc-200/50 dark:border-white/10 shadow-sm max-h-64 object-contain bg-white/50 dark:bg-black/50 backdrop-blur-sm" 
+      />
+      {isAbsolute && url.startsWith('http') && (
+        <a href={url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center gap-1 mt-1">
+          <ExternalLink size={10} /> Original Link
+        </a>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
+  const [stats, setStats] = useState({ visitors: 0, uses: 0, donationCount: 0 });
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    // Listen to Auth State
+    const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+
+    // Listen to global stats
+    const unsub = onSnapshot(doc(db, 'stats', 'global'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setStats({
+          visitors: data.visitors || 0,
+          uses: data.visitors || 0,
+          donationCount: data.visitors || 0
+        });
+      }
+    });
+    
+    // Track unique visitor
+    if (!localStorage.getItem('hasVisited')) {
+      localStorage.setItem('hasVisited', 'true');
+      incrementGlobalStat('visitors');
+    }
+
+    return () => {
+      unsub();
+      unsubAuth();
+    };
+  }, []);
+
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('theme');
@@ -136,11 +216,15 @@ export default function App() {
   const [linkStatus, setLinkStatus] = useState<{ step: string; progress: number } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ phase: string; percent: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentTab, setCurrentTab] = useState<'converter' | 'vault'>('converter');
+  const [currentTab, setCurrentTab] = useState<'converter' | 'vault' | 'about' | 'impact' | 'faq' | 'privacy' | 'terms' | 'contact' | 'security' | 'apidocs'>('converter');
   const [inputMode, setInputMode] = useState<'file' | 'link'>('link');
   const [shareLink, setShareLink] = useState('');
   const [showDonationModal, setShowDonationModal] = useState(false);
   const placeholderText = useTypewriterPlaceholder(URL_PLACEHOLDERS);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentTab]);
 
   const htmlFile = htmlFileState;
   const setHtmlFile = (file: File | null) => {
@@ -168,13 +252,15 @@ export default function App() {
       return;
     }
 
-    if (inputMode === 'link' && !shareLink) {
-      setError({
-        error: 'MISSING_INPUT',
-        message: 'No link provided.',
-        suggestion: 'Please paste a valid share link from ChatGPT or Claude.'
-      });
-      return;
+    if (inputMode === 'link') {
+      if (!shareLink) {
+        setError({
+          error: 'MISSING_INPUT',
+          message: 'No link provided.',
+          suggestion: 'Please paste a valid share link from ChatGPT or Claude.'
+        });
+        return;
+      }
     }
     
     try {
@@ -267,6 +353,7 @@ export default function App() {
       
       setTimeout(() => {
         setChatData(res.data);
+        incrementGlobalStat('uses');
         setUploadProgress(null);
         setLoading(false);
         setShowDonationModal(true);
@@ -337,7 +424,12 @@ export default function App() {
           <span className="text-xl font-bold tracking-[0.15em] uppercase font-mono bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-500 dark:from-white dark:to-zinc-500">Bridge</span>
         </div>
         <nav className="flex items-center gap-2">
-          <div className="hidden md:flex bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-full border border-zinc-200/50 dark:border-white/5 mr-6 transition-all">
+          <div className="hidden lg:flex items-center gap-6 font-medium text-xs uppercase tracking-widest text-zinc-500 mr-4">
+            <button onClick={() => setCurrentTab('about')} className={`transition-colors ${currentTab === 'about' ? 'text-zinc-900 dark:text-zinc-100 font-bold' : 'hover:text-zinc-900 dark:hover:text-zinc-300'}`}>About</button>
+            <button onClick={() => setCurrentTab('impact')} className={`transition-colors ${currentTab === 'impact' ? 'text-zinc-900 dark:text-zinc-100 font-bold' : 'hover:text-zinc-900 dark:hover:text-zinc-300'}`}>Impact</button>
+            <button onClick={() => setCurrentTab('faq')} className={`transition-colors ${currentTab === 'faq' ? 'text-zinc-900 dark:text-zinc-100 font-bold' : 'hover:text-zinc-900 dark:hover:text-zinc-300'}`}>FAQ</button>
+          </div>
+          <div className="hidden md:flex bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-full border border-zinc-200/50 dark:border-white/5 mr-2 transition-all">
             <button 
               onClick={() => setCurrentTab('converter')} 
               className={`px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-semibold transition-all ${currentTab === 'converter' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}
@@ -351,21 +443,48 @@ export default function App() {
               Vault
             </button>
           </div>
+          <button onClick={() => setShowDonationModal(true)} className="hidden md:flex items-center gap-2 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors mr-2">
+            <Heart className="w-3.5 h-3.5" />
+            Donate
+          </button>
           <button onClick={toggleTheme} className="w-10 h-10 rounded-full border border-zinc-200 dark:border-white/10 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-all flex items-center justify-center shrink-0">
             {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
           </button>
+          {user && (
+            <button onClick={logOut} title="Sign Out" className="w-10 h-10 rounded-full border border-zinc-200 dark:border-white/10 text-zinc-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-zinc-100 dark:hover:bg-white/5 transition-all flex items-center justify-center shrink-0 ml-1">
+              <LogOut size={14} />
+            </button>
+          )}
         </nav>
       </header>
 
       <main className="flex-1 flex flex-col items-center py-16 px-6 md:px-12 w-full z-10 relative">
         {currentTab === 'vault' ? (
           <Vault />
+        ) : currentTab === 'about' ? (
+          <About />
+        ) : currentTab === 'impact' ? (
+          <Impact />
+        ) : currentTab === 'faq' ? (
+          <FAQ />
+        ) : currentTab === 'privacy' ? (
+          <Privacy />
+        ) : currentTab === 'terms' ? (
+          <Terms />
+        ) : currentTab === 'contact' ? (
+          <Contact />
+        ) : currentTab === 'security' ? (
+          <Security />
+        ) : currentTab === 'apidocs' ? (
+          <ApiDocs />
         ) : (
           <>
-            <div className="w-full max-w-2xl text-center mb-16 relative">
+            <div className="w-full max-w-2xl text-center mb-0 relative">
               <h1 className="text-4xl md:text-6xl font-extrabold tracking-tighter mb-6 bg-clip-text text-transparent bg-gradient-to-b from-zinc-900 to-zinc-500 dark:from-white dark:to-zinc-500">Seamless AI Continuity</h1>
-              <p className="text-zinc-600 dark:text-zinc-400 text-sm md:text-base tracking-wide max-w-lg mx-auto leading-relaxed">Upload an exported HTML chat or paste a Share Link to bridge the gap between different LLMs flawlessly.</p>
+              <p className="text-zinc-600 dark:text-zinc-400 text-sm md:text-base tracking-wide max-w-lg mx-auto leading-relaxed mb-12">Upload an exported HTML chat or paste a Share Link to bridge the gap between different LLMs flawlessly.</p>
             </div>
+
+            <AILogoMarquee />
 
             <AnimatePresence mode="wait">
           
@@ -437,11 +556,18 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full flex flex-col items-center"
+              className="w-full flex flex-col items-center group/container"
             >
-              <div className="w-full max-w-2xl border border-zinc-200/50 dark:border-white/10 p-1.5 bg-white/50 backdrop-blur-xl dark:bg-[#0a0a0a]/50 mb-12 rounded-2xl shadow-2xl overflow-hidden relative">
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-transparent to-zinc-100 dark:to-white/5 pointer-events-none"></div>
-              <div className="flex flex-col p-6 rounded-xl border border-zinc-200/50 dark:border-white/5 bg-white dark:bg-zinc-950 w-full relative z-10 shadow-[0_0_40px_-15px_rgba(0,0,0,0.1)] dark:shadow-[0_0_40px_-15px_rgba(255,255,255,0.05)]">
+              <div className="w-full max-w-2xl border border-zinc-200/50 dark:border-transparent p-[1.5px] bg-zinc-200/50 dark:bg-zinc-800/50 mb-12 rounded-2xl shadow-2xl overflow-hidden relative">
+                
+                {/* Moving light border effect */}
+                <div className="absolute inset-0 z-0">
+                  <div className="absolute inset-[-150%] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300%] h-[300%] animate-[spin_5s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#00000000_0%,#00000000_50%,#18181b_100%)] dark:bg-[conic-gradient(from_90deg_at_50%_50%,#00000000_0%,#00000000_50%,#ffffff_100%)] opacity-30 group-hover/container:opacity-100 transition-opacity duration-700"></div>
+                </div>
+
+              <div className="absolute inset-[1.5px] bg-white dark:bg-[#0a0a0a] rounded-2xl z-10 pointer-events-none"></div>
+              
+              <div className="flex flex-col p-6 rounded-xl border border-zinc-200/50 dark:border-white/5 bg-white dark:bg-zinc-950 w-full relative z-20 shadow-[0_0_40px_-15px_rgba(0,0,0,0.1)] dark:shadow-[0_0_40px_-15px_rgba(255,255,255,0.05)]">
                 <div className="flex justify-center mb-8">
                   <div className="flex bg-zinc-100/80 dark:bg-zinc-900/80 rounded-lg p-1 backdrop-blur-md border border-zinc-200/50 dark:border-white/5">
                     <button 
@@ -549,6 +675,29 @@ export default function App() {
                           className="w-full bg-white dark:bg-[#0a0a0a] border border-zinc-200 dark:border-white/10 text-sm px-6 py-4 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-zinc-500 dark:focus:border-zinc-500 rounded-xl shadow-lg relative z-10 text-center transition-all focus:ring-4 focus:ring-zinc-900/5 dark:focus:ring-white/5"
                         />
                       </div>
+                      
+                      {shareLink.toLowerCase().includes('grok.com') && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="w-full max-w-md mt-6 p-4 border border-orange-500/30 bg-orange-50 dark:bg-orange-950/20 rounded-xl text-left shadow-lg relative z-20"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <AlertCircle size={16} className="text-orange-600 dark:text-orange-400" />
+                            <h4 className="text-orange-800 dark:text-orange-300 font-bold text-xs uppercase tracking-wider">Cloudflare Protected</h4>
+                          </div>
+                          <p className="text-orange-700 dark:text-orange-400/80 text-xs leading-relaxed mb-4">
+                            Grok blocks automated access (CAPTCHA). To import your chat, please open Grok in your browser, press <kbd className="bg-orange-100 dark:bg-orange-900/40 px-1 py-0.5 rounded border border-orange-200 dark:border-orange-800 font-mono">Ctrl+S</kbd> to save it as HTML, and upload the file instead.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setInputMode('file')}
+                            className="w-full bg-orange-600 hover:bg-orange-700 text-white py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors shadow shadow-orange-500/20"
+                          >
+                            Switch to HTML Upload
+                          </button>
+                        </motion.div>
+                      )}
                     </div>
                   )}
                     
@@ -557,7 +706,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={(e) => handleExtract(e, false)}
-                          disabled={loading || !shareLink}
+                          disabled={loading || !shareLink || shareLink.toLowerCase().includes('grok.com')}
                           className="w-full bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700 px-6 py-5 rounded-xl font-bold text-xs uppercase tracking-[0.2em] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex flex-col items-center justify-center gap-1 border border-zinc-200 dark:border-white/10 group relative overflow-hidden"
                         >
                           <span className="relative z-10">{uploadProgress ? `${uploadProgress.percent}%` : loading ? 'Bridging...' : 'Only Text'}</span>
@@ -566,7 +715,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={(e) => handleExtract(e, true)}
-                          disabled={loading || !shareLink}
+                          disabled={loading || !shareLink || shareLink.toLowerCase().includes('grok.com')}
                           className="w-full bg-zinc-900 dark:bg-white text-white dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-100 px-6 py-5 rounded-xl font-bold text-xs uppercase tracking-[0.2em] shadow-2xl hover:shadow-[0_0_40px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-1 transition-all duration-300 flex flex-col items-center justify-center gap-1 border border-transparent dark:border-white/10 group relative overflow-hidden"
                         >
                           <div className="absolute inset-0 bg-white/20 dark:bg-black/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
@@ -657,6 +806,31 @@ export default function App() {
               </div>
             </div>
 
+              <div className="w-full max-w-2xl mt-12 mb-8 border border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/20 rounded-2xl p-8 shadow-sm">
+                <div className="flex items-center justify-center gap-10 sm:gap-16 flex-wrap">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-[0.2em] font-bold">
+                      <Users size={16} className="text-yellow-500 dark:text-yellow-400" /> Visitors
+                    </div>
+                    <div className="text-3xl font-extrabold font-mono text-zinc-900 dark:text-white tracking-tight">{stats.visitors.toLocaleString()}</div>
+                  </div>
+                  <div className="w-px h-12 bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-[0.2em] font-bold">
+                      <Activity size={16} className="text-green-500 dark:text-green-400" /> Uses
+                    </div>
+                    <div className="text-3xl font-extrabold font-mono text-zinc-900 dark:text-white tracking-tight">{stats.uses.toLocaleString()}</div>
+                  </div>
+                  <div className="w-px h-12 bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-[0.2em] font-bold">
+                      <Heart size={16} className="text-rose-500 dark:text-rose-400" /> Support
+                    </div>
+                    <div className="text-3xl font-extrabold font-mono text-zinc-900 dark:text-white tracking-tight">{stats.donationCount.toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+
               <div 
                 className="w-full max-w-2xl mt-4 mb-8"
               >
@@ -665,13 +839,31 @@ export default function App() {
                   <p className="text-zinc-600 dark:text-zinc-400 text-xs mb-8">Extract your conversations in 3 simple steps</p>
                   
                   <div className="w-full flex justify-center mb-8 bg-zinc-50/50 dark:bg-black/20 rounded-2xl border border-zinc-100 dark:border-zinc-800/50 p-8 shadow-sm">
-                    <svg width="480" height="140" viewBox="0 0 480 140" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-zinc-800 dark:text-zinc-200 w-full max-w-full h-auto">
+                    <motion.svg 
+                      width="480" 
+                      height="140" 
+                      viewBox="0 0 480 140" 
+                      fill="none" 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className="text-white w-full max-w-full h-auto drop-shadow-sm"
+                      animate={{ y: [0, -8, 0] }}
+                      transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                    >
                       {/* Character Pointing */}
                       <circle cx="40" cy="40" r="14" stroke="currentColor" strokeWidth="3" fill="none" />
                       <path d="M40 54 V100 M40 70 Q 60 60 90 40 M40 70 L 20 90 M40 100 L 25 130 M40 100 L 55 130" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                       
                       {/* Flow Line */}
-                      <path d="M95 40 Q 150 40 180 70 T 420 70" stroke="currentColor" strokeWidth="2" strokeDasharray="4 6" fill="none" strokeLinecap="round" />
+                      <motion.path 
+                        d="M95 40 Q 150 40 180 70 T 420 70" 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        strokeDasharray="4 6" 
+                        fill="none" 
+                        strokeLinecap="round" 
+                        animate={{ strokeDashoffset: [0, -20] }}
+                        transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                      />
                       
                       {/* Step 1: AI Chat Context */}
                       <g transform="translate(140, 45)">
@@ -680,67 +872,124 @@ export default function App() {
                         <path d="M35 30 l8 8 l-2 -8 z" fill="currentColor" />
                       </g>
                       
-                      {/* Step 2: Keyboard / Save Context */}
-                      <g transform="translate(260, 45)">
-                        <rect x="0" y="0" width="60" height="50" rx="6" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="2" />
-                        
-                        {/* CTRL Key */}
-                        <rect x="6" y="10" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
-                        <text x="15" y="19.5" fontSize="6" fontWeight="bold" fill="currentColor" textAnchor="middle" dominantBaseline="middle">Ctrl</text>
-                        
-                        {/* + Key */}
-                        <rect x="26" y="10" width="12" height="14" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
-                        <text x="32" y="19.5" fontSize="8" fontWeight="bold" fill="currentColor" textAnchor="middle" dominantBaseline="middle">+</text>
-                        
-                        {/* S Key */}
-                        <rect x="40" y="10" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
-                        <text x="47" y="19.5" fontSize="8" fontWeight="bold" fill="currentColor" textAnchor="middle" dominantBaseline="middle">S</text>
-                        
-                        <rect x="8" y="28" width="44" height="12" rx="3" stroke="currentColor" strokeWidth="2" fill="none" />
-                      </g>
+                      {inputMode === 'file' ? (
+                        <>
+                          {/* Step 2: Keyboard / Save Context */}
+                          <g transform="translate(260, 45)">
+                            <rect x="0" y="0" width="60" height="50" rx="6" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="2" />
+                            
+                            {/* CTRL Key */}
+                            <rect x="6" y="10" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+                            <text x="15" y="19.5" fontSize="6" fontWeight="bold" fill="currentColor" textAnchor="middle" dominantBaseline="middle">Ctrl</text>
+                            
+                            {/* + Key */}
+                            <rect x="26" y="10" width="12" height="14" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+                            <text x="32" y="19.5" fontSize="8" fontWeight="bold" fill="currentColor" textAnchor="middle" dominantBaseline="middle">+</text>
+                            
+                            {/* S Key */}
+                            <rect x="40" y="10" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+                            <text x="47" y="19.5" fontSize="8" fontWeight="bold" fill="currentColor" textAnchor="middle" dominantBaseline="middle">S</text>
+                            
+                            <rect x="8" y="28" width="44" height="12" rx="3" stroke="currentColor" strokeWidth="2" fill="none" />
+                          </g>
 
-                      {/* Step 3: Extract / HTML Document */}
-                      <g transform="translate(390, 40)">
-                        <path d="M0 0 L35 0 L50 15 L50 60 L0 60 Z" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                        <path d="M35 0 L35 15 L50 15" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                        <path d="M10 30 L16 25 L10 20 M20 30 L26 25 L20 20 M30 30 L35 30" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        <path d="M15 45 H35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </g>
-                    </svg>
+                          {/* Step 3: Extract / HTML Document */}
+                          <g transform="translate(390, 40)">
+                            <path d="M0 0 L35 0 L50 15 L50 60 L0 60 Z" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                            <path d="M35 0 L35 15 L50 15" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                            <path d="M10 30 L16 25 L10 20 M20 30 L26 25 L20 20 M30 30 L35 30" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M15 45 H35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          </g>
+                        </>
+                      ) : (
+                        <>
+                          {/* Step 2: Share Link */}
+                          <g transform="translate(260, 45)">
+                            <rect x="0" y="0" width="60" height="50" rx="6" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="2" />
+                            
+                            {/* Inner Box */}
+                            <rect x="14" y="12" width="32" height="26" rx="4" stroke="currentColor" strokeWidth="2" fill="none" />
+                            
+                            {/* Link Icon */}
+                            <path d="M 25 29 h -2 a 4 4 0 0 1 0 -8 h 2 M 35 21 h 2 a 4 4 0 0 1 0 8 h -2 M 25 25 h 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                          </g>
+
+                          {/* Step 3: Paste Input */}
+                          <g transform="translate(390, 40)">
+                            {/* Clipboard Icon */}
+                            <rect x="10" y="15" width="30" height="35" rx="3" fill="currentColor" fillOpacity="0.05" stroke="currentColor" strokeWidth="2" />
+                            <rect x="18" y="10" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+                            <path d="M18 28 h14 m-14 8 h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          </g>
+                        </>
+                      )}
+                    </motion.svg>
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-6">
-                  <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
-                    <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">1</div>
-                    <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
-                      <svg className="w-6 h-6 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                    </div>
-                    <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Open AI Chat</h4>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Navigate to your finished conversation in ChatGPT, Claude, or any AI platform.</p>
-                  </div>
+                  {inputMode === 'file' ? (
+                    <>
+                      <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
+                        <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">1</div>
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
+                          <svg className="w-6 h-6 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                        </div>
+                        <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Open AI Chat</h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Navigate to your finished conversation in ChatGPT, Claude, or any AI platform.</p>
+                      </div>
 
-                  <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
-                    <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">2</div>
-                    <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
-                      <svg className="w-6 h-6 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
-                    </div>
-                    <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Save as HTML</h4>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Press <strong className="text-zinc-900 dark:text-white">Ctrl+S</strong> (or <strong className="text-zinc-900 dark:text-white">Cmd+S</strong>) on your keyboard and save as "Webpage, HTML Only".</p>
-                  </div>
+                      <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
+                        <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">2</div>
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
+                          <svg className="w-6 h-6 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                        </div>
+                        <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Save as HTML</h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Press <strong className="text-zinc-900 dark:text-white">Ctrl+S</strong> (or <strong className="text-zinc-900 dark:text-white">Cmd+S</strong>) on your keyboard and save as "Webpage, HTML Only".</p>
+                      </div>
 
-                  <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
-                    <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">3</div>
-                    <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
-                      <svg className="w-6 h-6 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                    </div>
-                    <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Upload File</h4>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Drag & drop the saved HTML file into the dropzone above to extract the chat.</p>
-                  </div>
+                      <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
+                        <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">3</div>
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
+                          <svg className="w-6 h-6 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                        </div>
+                        <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Upload File</h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Drag & drop the saved HTML file into the dropzone above to extract the chat.</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
+                        <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">1</div>
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
+                          <svg className="w-6 h-6 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                        </div>
+                        <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Open AI Chat</h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Navigate to your finished conversation in ChatGPT.</p>
+                      </div>
+
+                      <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
+                        <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">2</div>
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
+                          <LinkIcon className="w-6 h-6 text-zinc-400 dark:text-zinc-500" />
+                        </div>
+                        <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Create Link</h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Click the Share icon in the top right corner and create a public link.</p>
+                      </div>
+
+                      <div className="flex flex-col items-center text-center p-6 bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl relative">
+                        <div className="w-8 h-8 rounded-full bg-black text-white dark:bg-white dark:text-black flex items-center justify-center font-bold text-xs mb-4 absolute -top-4 shadow-lg uppercase tracking-widest font-mono">3</div>
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm mb-4 w-full flex justify-center">
+                          <Copy className="w-6 h-6 text-zinc-400 dark:text-zinc-500" />
+                        </div>
+                        <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm mb-2">Paste & Extract</h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">Paste the copied share link into the input field above to parse the conversation.</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
               <DonationSection />
-              <ExploreTools />
             </motion.div>
           ) : (
             <motion.div
@@ -772,6 +1021,10 @@ export default function App() {
                           onClick={async () => {
                             if (!chatData) return;
                             try {
+                              let currentUser = user;
+                              if (!currentUser) {
+                                currentUser = await signInWithGoogle();
+                              }
                               setVaultSaved(false);
                               await vaultDbTools.saveItem({
                                 id: chatData.title + '_' + Date.now(),
@@ -876,7 +1129,7 @@ export default function App() {
                 <div className="bg-zinc-50/50 dark:bg-[#0a0a0a]/50 border-b border-zinc-200/50 dark:border-white/5 p-3 flex flex-col md:flex-row md:items-center justify-between gap-4 backdrop-blur-sm relative z-10">
                   <div className="text-[10px] text-zinc-600 dark:text-zinc-400 font-mono flex items-center gap-3">
                     <span className="text-zinc-900 dark:text-white bg-white dark:bg-black border border-zinc-200/50 dark:border-white/10 px-2 py-0.5 rounded shadow-sm uppercase tracking-widest text-[8px] font-bold">Tip</span>
-                    Claude does not support secure AI Studio links. Use Markdown export instead.
+                    Claude and Grok do not support secure automatic link extraction. Use HTML export instead.
                   </div>
                   <div className="relative w-full md:w-64 group">
                     <div className="absolute inset-0 bg-gradient-to-r from-zinc-200 to-transparent dark:from-white/10 blur-md group-focus-within:opacity-100 opacity-0 transition-opacity"></div>
@@ -938,17 +1191,7 @@ export default function App() {
                             <div className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end mb-4' : 'items-start mb-4'}`}>
                               {msg.images.map((imgUrl, i) => {
                                 const isAbsolute = imgUrl.startsWith('http') || imgUrl.startsWith('data:');
-                                const finalUrl = isAbsolute ? imgUrl : `/${imgUrl}`;
-                                return (
-                                  <div key={i} className="flex flex-col items-center gap-1 group/img">
-                                    <img src={finalUrl} alt="Attached image" className="max-w-full rounded-xl border border-zinc-200/50 dark:border-white/10 shadow-sm max-h-64 object-contain bg-white/50 dark:bg-black/50 backdrop-blur-sm" />
-                                    {isAbsolute && imgUrl.startsWith('http') && (
-                                      <a href={imgUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center gap-1">
-                                        <ExternalLink size={10} /> Original Link
-                                      </a>
-                                    )}
-                                  </div>
-                                );
+                                return <ChatImage key={i} url={imgUrl} isAbsolute={isAbsolute} />;
                               })}
                             </div>
                           )}
@@ -982,9 +1225,11 @@ export default function App() {
           System Status: <span className="flex items-center gap-1.5 text-zinc-900 dark:text-white font-bold"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Operational</span> <span className="opacity-50">•</span> V2.0-Alpha
         </div>
         <div className="flex gap-6 text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold">
-          <a href="#" className="hover:text-zinc-900 dark:text-white transition-colors">Security</a>
-          <a href="#" className="hover:text-zinc-900 dark:text-white transition-colors">API Docs</a>
-          <a href="#" className="hover:text-zinc-900 dark:text-white transition-colors">Privacy</a>
+          <button onClick={() => setCurrentTab('security')} className="hover:text-zinc-900 dark:text-white transition-colors">Security</button>
+          <button onClick={() => setCurrentTab('apidocs')} className="hover:text-zinc-900 dark:text-white transition-colors">API Docs</button>
+          <button onClick={() => setCurrentTab('privacy')} className="hover:text-zinc-900 dark:text-white transition-colors">Privacy Policy</button>
+          <button onClick={() => setCurrentTab('terms')} className="hover:text-zinc-900 dark:text-white transition-colors">Terms of Service</button>
+          <button onClick={() => setCurrentTab('contact')} className="hover:text-zinc-900 dark:text-white transition-colors">Contact</button>
         </div>
       </footer>
 
