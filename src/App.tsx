@@ -416,7 +416,7 @@ export default function App() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-50 flex items-center justify-between px-6 md:px-12 py-6 border-b border-zinc-200/50 dark:border-white/5 backdrop-blur-xl bg-white/70 dark:bg-black/50 shrink-0 shadow-sm">
+      <header className="sticky top-0 z-50 flex items-center justify-between px-4 sm:px-6 md:px-12 py-4 sm:py-6 border-b border-zinc-200/50 dark:border-white/5 backdrop-blur-xl bg-white/70 dark:bg-black/50 shrink-0 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-md bg-gradient-to-br from-zinc-800 to-black dark:from-zinc-200 dark:to-white flex items-center justify-center shadow-inner">
             <div className="w-3 h-3 rounded-sm bg-white dark:bg-black"></div>
@@ -458,7 +458,7 @@ export default function App() {
         </nav>
       </header>
 
-      <main className="flex-1 flex flex-col items-center py-16 px-6 md:px-12 w-full z-10 relative">
+      <main className="flex-1 flex flex-col items-center py-10 sm:py-16 px-4 sm:px-6 md:px-12 w-full z-10 relative">
         {currentTab === 'vault' ? (
           <Vault />
         ) : currentTab === 'about' ? (
@@ -806,22 +806,22 @@ export default function App() {
               </div>
             </div>
 
-              <div className="w-full max-w-2xl mt-12 mb-8 border border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/20 rounded-2xl p-8 shadow-sm">
-                <div className="flex items-center justify-center gap-10 sm:gap-16 flex-wrap">
+              <div className="w-full max-w-2xl mt-12 mb-8 border border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/20 rounded-2xl p-4 sm:p-8 shadow-sm">
+                <div className="flex items-center justify-center gap-6 sm:gap-16 flex-wrap">
                   <div className="flex flex-col items-center gap-2">
                     <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-[0.2em] font-bold">
                       <Users size={16} className="text-yellow-500 dark:text-yellow-400" /> Visitors
                     </div>
                     <div className="text-3xl font-extrabold font-mono text-zinc-900 dark:text-white tracking-tight">{stats.visitors.toLocaleString()}</div>
                   </div>
-                  <div className="w-px h-12 bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
+                  <div className="w-12 h-px sm:w-px sm:h-12 bg-zinc-200 dark:bg-zinc-800"></div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-[0.2em] font-bold">
                       <Activity size={16} className="text-green-500 dark:text-green-400" /> Uses
                     </div>
                     <div className="text-3xl font-extrabold font-mono text-zinc-900 dark:text-white tracking-tight">{stats.uses.toLocaleString()}</div>
                   </div>
-                  <div className="w-px h-12 bg-zinc-200 dark:bg-zinc-800 hidden sm:block"></div>
+                  <div className="w-12 h-px sm:w-px sm:h-12 bg-zinc-200 dark:bg-zinc-800"></div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-[10px] uppercase tracking-[0.2em] font-bold">
                       <Heart size={16} className="text-rose-500 dark:text-rose-400" /> Support
@@ -838,7 +838,7 @@ export default function App() {
                   <h3 className="text-sm uppercase tracking-[0.2em] text-zinc-500 font-bold mb-2">How it works</h3>
                   <p className="text-zinc-600 dark:text-zinc-400 text-xs mb-8">Extract your conversations in 3 simple steps</p>
                   
-                  <div className="w-full flex justify-center mb-8 bg-zinc-50/50 dark:bg-black/20 rounded-2xl border border-zinc-100 dark:border-zinc-800/50 p-8 shadow-sm">
+                  <div className="w-full flex justify-center mb-8 bg-zinc-50/50 dark:bg-black/20 rounded-2xl border border-zinc-100 dark:border-zinc-800/50 p-4 sm:p-8 shadow-sm">
                     <motion.svg 
                       width="480" 
                       height="140" 
@@ -1220,7 +1220,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="px-6 md:px-12 py-8 border-t border-zinc-200/50 dark:border-white/5 flex flex-col md:flex-row gap-4 justify-between items-center bg-white/50 dark:bg-[#0a0a0a]/50 backdrop-blur-xl mt-auto shrink-0 z-10 relative">
+      <footer className="px-4 sm:px-6 md:px-12 py-6 sm:py-8 border-t border-zinc-200/50 dark:border-white/5 flex flex-col md:flex-row gap-4 justify-between items-center bg-white/50 dark:bg-[#0a0a0a]/50 backdrop-blur-xl mt-auto shrink-0 z-10 relative">
         <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-mono flex items-center gap-2">
           System Status: <span className="flex items-center gap-1.5 text-zinc-900 dark:text-white font-bold"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Operational</span> <span className="opacity-50">•</span> V2.0-Alpha
         </div>
@@ -1273,6 +1273,7 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }

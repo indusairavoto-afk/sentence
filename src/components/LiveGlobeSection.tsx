@@ -55,7 +55,7 @@ export function LiveGlobeSection() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center bg-white dark:bg-[#0a0a0a] rounded-[2.5rem] border border-zinc-200 dark:border-white/10 shadow-xl p-8 overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-center bg-white dark:bg-[#0a0a0a] rounded-[2rem] sm:rounded-[2.5rem] border border-zinc-200 dark:border-white/10 shadow-xl p-4 sm:p-8 overflow-hidden">
         
         <div className="lg:col-span-2 relative aspect-square max-h-[500px] flex justify-center items-center overflow-hidden rounded-full" ref={containerRef}>
             {width > 0 && (
@@ -66,7 +66,7 @@ export function LiveGlobeSection() {
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="p-6 rounded-2xl bg-zinc-50 dark:bg-white/5 border border-zinc-100 dark:border-white/10">
+          <div className="p-4 sm:p-6 rounded-2xl bg-zinc-50 dark:bg-white/5 border border-zinc-100 dark:border-white/10">
             <div className="flex items-center gap-3 text-zinc-500 mb-2">
               <Users size={18} className="text-yellow-500" />
               <span className="text-xs font-semibold uppercase tracking-wider">Total Visitors</span>
@@ -77,7 +77,7 @@ export function LiveGlobeSection() {
             <p className="text-sm text-zinc-400 mt-2">All time platform pageviews</p>
           </div>
 
-          <div className="p-6 rounded-2xl bg-zinc-50 dark:bg-white/5 border border-zinc-100 dark:border-white/10">
+          <div className="p-4 sm:p-6 rounded-2xl bg-zinc-50 dark:bg-white/5 border border-zinc-100 dark:border-white/10">
             <div className="flex items-center gap-3 text-zinc-500 mb-2">
               <Activity size={18} className="text-green-500" />
               <span className="text-xs font-semibold uppercase tracking-wider">Total USES</span>
@@ -88,7 +88,7 @@ export function LiveGlobeSection() {
             <p className="text-sm text-zinc-400 mt-2">Successful bridge interactions</p>
           </div>
 
-          <div className="p-6 rounded-2xl bg-zinc-50 dark:bg-white/5 border border-zinc-100 dark:border-white/10">
+          <div className="p-4 sm:p-6 rounded-2xl bg-zinc-50 dark:bg-white/5 border border-zinc-100 dark:border-white/10">
             <div className="flex items-center gap-3 text-zinc-500 mb-4">
               <Heart size={18} className="text-pink-500" />
               <span className="text-xs font-semibold uppercase tracking-wider">Donations</span>

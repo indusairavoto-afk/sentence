@@ -1,8 +1,19 @@
 const fs = require('fs');
 const cheerio = require('cheerio');
-const html = fs.readFileSync('gemini_dump_3.html', 'utf8');
+const html = fs.readFileSync('chatgpt-puppeteer.html', 'utf8');
 const $ = cheerio.load(html);
 
-console.log("user-query:", $('user-query').length);
-console.log("model-response:", $('model-response').length);
-console.log("user-query, model-response:", $('user-query, model-response').length);
+const selectors = [
+  '[data-message-author-role]',
+  '[data-testid="message"]',
+  'article',
+];
+
+for (const sel of selectors) {
+  console.log(`Selector "${sel}" count:`, $(sel).length);
+}
+
+const authorElems = $('[data-message-author-role]');
+authorElems.each((i, el) => {
+  console.log(`Role: ${$(el).attr('data-message-author-role')}, Text: ${$(el).text().substring(0, 30)}...`);
+});

@@ -140,11 +140,20 @@ async function extractChatWithImages(
     }
 
     // Select all elements that contain messages and extract role/innerText
-    const messagesData = await page.$$eval(
-      '.markdown, [data-message-author-role], .font-claude-message, .font-user-message, .message, .chat-message, [data-testid="message"], article, .prose, .ProseMirror, user-query, model-response, .model-response, .user-query, response-container, message-content, .message-row, .message-bubble',
-      (elements) => {
+    const messagesData = await page.evaluate(() => {
+        const strictSelector = '[data-message-author-role], [data-testid="message"], article, .font-claude-message, .font-user-message, .message-row, .message-bubble, user-query, model-response, .user-query, .model-response, response-container, message-content, .chat-message';
+        const genericSelector = '.message, .markdown, .prose, .ProseMirror';
+        
+        let elements = Array.from(document.querySelectorAll(strictSelector));
+        let activeSelector = strictSelector;
+
+        if (elements.length === 0) {
+            elements = Array.from(document.querySelectorAll(genericSelector));
+            activeSelector = genericSelector;
+        }
+        
         // Filter out nested matching elements to avoid duplicate extractions
-        const topLevelElements = elements.filter((el) => {
+        let topLevelElements = elements.filter((el) => {
           if (
             el.closest(
               'nav, aside, [class*="sidebar"], [class*="menu"], header, [class*="header"], .drawer, .drawer-content',
@@ -153,11 +162,7 @@ async function extractChatWithImages(
             return false;
           let parent = el.parentElement;
           while (parent) {
-            if (
-              parent.matches(
-                '.markdown, [data-message-author-role], .font-claude-message, .font-user-message, .message, .chat-message, [data-testid="message"], article, .prose, .ProseMirror, user-query, model-response, .model-response, .user-query, response-container, message-content, .message-row, .message-bubble',
-              )
-            ) {
+            if (parent.matches && parent.matches(activeSelector)) {
               return false;
             }
             parent = parent.parentElement;
@@ -315,16 +320,17 @@ async function extractChatWithImages(
             };
           })
           .filter((msg) => msg.text.trim() !== "" || msg.imagesUrls.length > 0); // Filter out truly empty messages
-      },
-    );
+    });
 
-    // Post-process to fix null roles using flip-flop logic
+    // Second pass to resolve remaining unknown roles using flip-flop logic
     let isUser = true;
     for (const msg of messagesData) {
-      if (!msg.role) {
+      if (!msg.role || msg.role === 'unknown') {
         msg.role = isUser ? "user" : "assistant";
+        isUser = !isUser; // Toggle for the next unknown message
+      } else {
+        isUser = msg.role !== 'user'; // keep alternating correctly based on latest explicit role
       }
-      isUser = msg.role !== "user"; // next should be the opposite
     }
 
     if (messagesData.length === 0) {
@@ -987,15 +993,20 @@ function extractMessagesFromHtml(html: string) {
 
   // 4. Fallback to parsing DOM elements (Generic, Claude & ChatGPT)
   if (messages.length === 0) {
-    let isUser = true;
+    const strictSelector = '[data-message-author-role], [data-testid="message"], article, .font-claude-message, .font-user-message, .message-row, .message-bubble, user-query, model-response, .user-query, .model-response, response-container, message-content, .chat-message';
+    const genericSelector = '.message, .markdown, .prose, .ProseMirror';
+    
+    let messageNodes = $(strictSelector);
+    let activeSelector = strictSelector;
 
-    // Common selectors for chat messages in various tools
-    let messageNodes = $(
-      '.markdown, [data-message-author-role], .font-claude-message, .font-user-message, .message, .chat-message, [data-testid="message"], article, .prose, .ProseMirror, user-query, model-response, .model-response, .user-query, response-container, message-content, .message-row, .message-bubble, [class*="message-row"], [class*="message-bubble"]',
-    );
+    if (messageNodes.length === 0) {
+      messageNodes = $(genericSelector);
+      activeSelector = genericSelector;
+    }
 
     // Filter out nested nodes
     const topLevelNodes: any[] = [];
+
     messageNodes.each((_, el) => {
       if (
         $(el).closest(
@@ -1006,12 +1017,7 @@ function extractMessagesFromHtml(html: string) {
       let parent = el.parent;
       let isNested = false;
       while (parent && (parent.type as unknown as string) !== "root") {
-        const $parent = $(parent as any);
-        if (
-          $parent.is(
-            '.markdown, [data-message-author-role], .font-claude-message, .font-user-message, .message, .chat-message, [data-testid="message"], article, .prose, .ProseMirror, user-query, model-response, .model-response, .user-query, response-container, message-content, .message-row, .message-bubble, [class*="message-row"], [class*="message-bubble"]',
-          )
-        ) {
+        if ($(parent as any).is(activeSelector)) {
           isNested = true;
           break;
         }
@@ -1030,17 +1036,21 @@ function extractMessagesFromHtml(html: string) {
       
       $("body *").each((_, el) => {
         const $el = $(el);
+        // Exclude text-heavy containers like markdown bodies from being selected as chat containers
+        if ($el.is('.markdown, .prose, p, article:not([data-testid])')) return;
+
         let blockChildrenCount = 0;
         $el.children().each((_, child) => {
           const $child = $(child);
           const textLength = $child.text().trim().length;
           // Count children that are actual visible blocks with some text
-          if (textLength > 10 && !$child.is('script, style, noscript, nav, header, footer')) {
+          // Avoid treating simple paragraphs or headers as full messages
+          if (textLength > 10 && !$child.is('script, style, noscript, nav, header, footer, p, h1, h2, h3, h4, h5, h6, ul, ol, li, span, a, strong, em, b, i, pre, code, blockquote')) {
             blockChildrenCount++;
           }
         });
         
-        // A typical chat has at least a few messages. If we find a container with many text blocks, it's a candidate.
+        // A typical chat has at least a few messages. If we find a container with many structural blocks, it's a candidate.
         if (blockChildrenCount > maxScore && blockChildrenCount >= 2) {
           maxScore = blockChildrenCount;
           bestContainer = el;
@@ -1121,7 +1131,7 @@ function extractMessagesFromHtml(html: string) {
             } else if (textContent.match(/^\s*(ChatGPT|Claude|Gemini|Assistant|Grok|Bot|AI)( said)?:?/i)) {
               role = "assistant";
             } else {
-              role = isUser ? "user" : "assistant"; // fallback to flip-flop
+              role = "unknown";
             }
           }
         }
@@ -1193,13 +1203,6 @@ function extractMessagesFromHtml(html: string) {
             timestamp,
             imagesUrls: allImgs,
           });
-          if (role === "assistant") {
-            isUser = true;
-          } else if (role === "user") {
-            isUser = false;
-          } else {
-            isUser = !isUser;
-          }
         }
       });
     } else {
@@ -1255,6 +1258,17 @@ function extractMessagesFromHtml(html: string) {
   console.log('Extracted messages length:', messages.length);
   // Remove Claude shared chat boilerplate/disclaimer
   let filteredMessages = messages.filter(msg => !(msg.content.includes('This is a copy of a chat between') && msg.content.includes('Anthropic')));
+
+  // Second pass to resolve remaining unknown roles using flip-flop logic
+  let isUser = true;
+  for (const msg of filteredMessages) {
+    if (!msg.role || msg.role === 'unknown') {
+      msg.role = isUser ? "user" : "assistant";
+      isUser = !isUser; // Toggle for the next unknown message
+    } else {
+      isUser = msg.role !== 'user'; // keep alternating correctly based on latest explicit role
+    }
+  }
 
   // Deduplicate adjacent messages with the exact same content
   const deduplicatedMessages = filteredMessages.filter((msg, idx) => {

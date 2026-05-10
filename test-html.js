@@ -1,5 +1,5 @@
 const fs = require('fs');
-const fetch = require('node-fetch').default || require('node-fetch');
+const fetch = require('node-fetch');
 
 (async () => {
     const html = `
@@ -8,9 +8,6 @@ const fetch = require('node-fetch').default || require('node-fetch');
         <article data-testid="message"><div data-message-author-role="user">Hello!</div></article>
         <article data-testid="message"><div data-message-author-role="assistant">Hi there!</div></article>
         <article data-testid="message"><div data-message-author-role="user">How are you?</div></article>
-        <article data-testid="message"><div data-message-author-role="assistant">Good.</div></article>
-        <article data-testid="message"><div data-message-author-role="user">Bye.</div></article>
-        <article data-testid="message"><div data-message-author-role="assistant">Bye bye!</div></article>
         </main>
     </body></html>
     `;

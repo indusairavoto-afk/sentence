@@ -266,6 +266,49 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
       document.addEventListener("mouseup", handleMouseUp)
     }
 
+    const handleTouchStart = (event: TouchEvent) => {
+      autoRotate = false
+      if (event.touches.length === 0) return
+      const touch = event.touches[0]
+      const startX = touch.clientX
+      const startY = touch.clientY
+      const startRotation = [...rotation]
+
+      const handleTouchMove = (moveEvent: TouchEvent) => {
+        if (moveEvent.touches.length === 0) return
+        // Only prevent default if they are swiping horizontally more than vertically
+        const t = moveEvent.touches[0]
+        const dx = t.clientX - startX
+        const dy = t.clientY - startY
+        
+        if (Math.abs(dx) > Math.abs(dy) && moveEvent.cancelable) {
+          moveEvent.preventDefault() // prevent scroll if mainly doing horizontal rotation
+        }
+
+        const sensitivity = 0.5
+        rotation[0] = startRotation[0] + dx * sensitivity
+        rotation[1] = startRotation[1] - dy * sensitivity
+        rotation[1] = Math.max(-90, Math.min(90, rotation[1]))
+
+        projection.rotate(rotation as [number, number, number])
+        render()
+      }
+
+      const handleTouchEnd = () => {
+        document.removeEventListener("touchmove", handleTouchMove)
+        document.removeEventListener("touchend", handleTouchEnd)
+        document.removeEventListener("touchcancel", handleTouchEnd)
+
+        setTimeout(() => {
+          autoRotate = true
+        }, 10)
+      }
+
+      document.addEventListener("touchmove", handleTouchMove, { passive: false })
+      document.addEventListener("touchend", handleTouchEnd)
+      document.addEventListener("touchcancel", handleTouchEnd)
+    }
+
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault()
       const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1
@@ -275,7 +318,8 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
     }
 
     canvas.addEventListener("mousedown", handleMouseDown)
-    canvas.addEventListener("wheel", handleWheel)
+    canvas.addEventListener("touchstart", handleTouchStart, { passive: false })
+    canvas.addEventListener("wheel", handleWheel, { passive: false })
 
     // Load the world data
     loadWorldData()
@@ -284,6 +328,7 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
     return () => {
       rotationTimer.stop()
       canvas.removeEventListener("mousedown", handleMouseDown)
+      canvas.removeEventListener("touchstart", handleTouchStart)
       canvas.removeEventListener("wheel", handleWheel)
     }
   }, [width, height])
